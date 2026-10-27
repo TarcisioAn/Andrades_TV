@@ -28,14 +28,17 @@ final class Catalog {
     private static final class Fav {
         final String name, tagline;
         final int top, bottom;
+        final App.Logo logo;
         final boolean sideload, vpn;
         final String[] pkgs;
 
-        Fav(String name, String tagline, int top, int bottom, boolean sideload, boolean vpn, String... pkgs) {
+        Fav(String name, String tagline, int top, int bottom, App.Logo logo, boolean sideload, boolean vpn,
+            String... pkgs) {
             this.name = name;
             this.tagline = tagline;
             this.top = top;
             this.bottom = bottom;
+            this.logo = logo;
             this.sideload = sideload;
             this.vpn = vpn;
             this.pkgs = pkgs;
@@ -43,18 +46,22 @@ final class Catalog {
     }
 
     private static final Fav[] FAVORITES = {
-        new Fav("HBO Max", "Séries e filmes da HBO, Warner Bros. e DC",
-                0xFF4B1FD1, 0xFF0B0A2E, false, false, "com.wbd.stream", "com.hbo.hbonow"),
-        new Fav("Disney+", "Disney, Pixar, Marvel, Star Wars e National Geographic",
-                0xFF1E4FB8, 0xFF07122F, false, false, "com.disney.disneyplus"),
-        new Fav("Prime Video", "Filmes e séries da Amazon",
-                0xFF0F79AF, 0xFF0A141C, false, false,
-                "com.amazon.amazonvideo.livingroom", "com.amazon.avod.thirdpartyclient"),
-        new Fav("YouTube", "Sem anúncios e sem patrocínios, com o SmartTube",
-                0xFFC4161C, 0xFF1A0507, true, false,
-                "com.teamsmart.videomanager.tv", "com.liskovsoft.smarttubetv", "com.liskovsoft.smarttubetv.beta"),
-        new Fav("NordVPN", "Proteja a ligação antes de ver",
-                0xFF2F6BFF, 0xFF0A1433, false, true, "com.nordvpn.android"),
+        new Fav("HBO Max", "Séries e filmes da HBO, Warner Bros. e DC", 0xFF5B34F2, 0xFF1B0F5E,
+                new App.Logo(0xFF4A2BD8, 0xFFFFFFFF, "HBO max", null, 0, false),
+                false, false, "com.wbd.stream", "com.hbo.hbonow"),
+        new Fav("Disney+", "Disney, Pixar, Marvel, Star Wars e National Geographic", 0xFF1F4FB5, 0xFF061538,
+                new App.Logo(0xFF0B2260, 0xFFFFFFFF, "Disney+", null, 0, false),
+                false, false, "com.disney.disneyplus"),
+        new Fav("Prime Video", "Filmes e séries da Amazon", 0xFF1A98FF, 0xFF06345A,
+                new App.Logo(0xFF1A98FF, 0xFFFFFFFF, "prime video", null, 0, true),
+                false, false, "com.amazon.amazonvideo.livingroom", "com.amazon.avod.thirdpartyclient"),
+        new Fav("YouTube", "Sem anúncios e sem patrocínios, com o SmartTube", 0xFFE5262C, 0xFF4A0709,
+                new App.Logo(0xFFFFFFFF, 0xFF0F0F0F, "YouTube", "▶", 0xFFFF0033, false),
+                true, false, "com.teamsmart.videomanager.tv", "com.liskovsoft.smarttubetv",
+                "com.liskovsoft.smarttubetv.beta"),
+        new Fav("NordVPN", "Proteja a ligação antes de ver", 0xFF4A7BFF, 0xFF0E1E52,
+                new App.Logo(0xFF3E66F5, 0xFFFFFFFF, "NordVPN", null, 0, false),
+                false, true, "com.nordvpn.android"),
     };
 
     /** Apps que não fazem sentido no ecrã inicial (o próprio launcher, o da fábrica e afins). */
@@ -92,10 +99,10 @@ final class Catalog {
             }
             if (found != null) {
                 ApplicationInfo ai = launchable.get(found).activityInfo.applicationInfo;
-                r.favorites.add(new App(found, f.name, f.tagline, f.top, f.bottom,
+                r.favorites.add(new App(found, f.name, f.tagline, f.top, f.bottom, f.logo,
                         ai.loadBanner(pm), ai.loadIcon(pm), launchIntent(pm, found), f.sideload, f.vpn));
             } else {
-                r.favorites.add(new App(f.pkgs[0], f.name, f.tagline, f.top, f.bottom,
+                r.favorites.add(new App(f.pkgs[0], f.name, f.tagline, f.top, f.bottom, f.logo,
                         null, null, null, f.sideload, f.vpn));
             }
             for (String p : f.pkgs) used.add(p);
@@ -112,7 +119,7 @@ final class Catalog {
             Drawable icon = ri.loadIcon(pm);
             int tint = averageColor(icon);
             others.add(new App(pkg, String.valueOf(ri.loadLabel(pm)), null,
-                    darken(tint, 0.55f), darken(tint, 0.15f),
+                    darken(tint, 0.8f), darken(tint, 0.3f), null,
                     ai.loadBanner(pm), icon, launch, false, false));
         }
         Collator col = Collator.getInstance();
@@ -120,7 +127,7 @@ final class Catalog {
         r.others.addAll(others);
 
         r.others.add(new App("android.settings", "Definições", "Rede, imagem, som e sistema da TV",
-                0xFF4A4F5A, 0xFF121418, null, c.getDrawable(android.R.drawable.ic_menu_preferences),
+                0xFF6E7380, 0xFF23262D, null, null, c.getDrawable(android.R.drawable.ic_menu_preferences),
                 new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), false, false));
         return r;
     }

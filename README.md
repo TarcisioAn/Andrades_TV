@@ -2,9 +2,10 @@
 
 Um ecrã inicial leve e sem anúncios para TVs Android / Google TV, com o visual da Apple TV.
 
-- **Prateleira no topo:** o fundo ganha as cores do app em foco e mostra o nome e uma frase sobre ele.
-- **Doca de favoritos:** HBO Max, Disney+, Prime Video, YouTube sem anúncios (SmartTube) e NordVPN.
-  Se um favorito não estiver instalado, carregar OK abre a Play Store.
+- **Vidro claro de dia, escuro à noite** (muda sozinho às 7h e às 20h).
+- **Destaque grande** com as cores e o logótipo do app em foco, e uma frase sobre ele.
+- **Doca de vidro fosco** com os favoritos: HBO Max, Disney+, Prime Video, YouTube sem anúncios (SmartTube)
+  e NordVPN. Com os apps instalados aparecem os logótipos oficiais; sem eles, um logótipo em texto e "Obter".
 - **Todas as apps** numa grelha mais abaixo, por ordem alfabética, com o atalho para as Definições.
 - **Estado da VPN** sempre visível no canto superior direito, ao lado do relógio.
 - **Protetor de ecrã** com relógio, que muda de sítio a cada minuto.
@@ -73,8 +74,9 @@ oficial é o YouTube Premium.
 app/AndroidManifest.xml
 app/res/drawable/               ícone e banner (vetoriais)
 app/src/pt/andrades/tv/
-  HomeActivity.java             o ecrã inicial: prateleira, doca e grelha
+  HomeActivity.java             o ecrã inicial: destaque, doca e grelha
   Card.java                     o cartão com o efeito de foco da Apple TV
+  Theme.java                    as cores do tema claro e escuro
   Catalog.java                  favoritos e leitura dos apps instalados
   VpnWatcher.java               deteta se há uma VPN ligada
   ClockDream.java               o protetor de ecrã

@@ -8,8 +8,10 @@ final class App {
     final String pkg;
     final String name;
     final String tagline;
-    /** Cores do fundo quando o cartão está em foco (a "prateleira" do topo, como na Apple TV). */
+    /** Cores do destaque grande quando o cartão está em foco. */
     final int colorTop, colorBottom;
+    /** Logótipo desenhado quando o app não tem banner (por exemplo, ainda não está instalado). */
+    final Logo logo;
     final Drawable banner, icon;
     /** null quando o app não está instalado. */
     final Intent launch;
@@ -17,13 +19,32 @@ final class App {
     final boolean sideload;
     final boolean vpn;
 
-    App(String pkg, String name, String tagline, int colorTop, int colorBottom,
+    /** Um logótipo em texto: fundo, cor das letras, texto e, opcionalmente, um símbolo antes dele. */
+    static final class Logo {
+        final int bg, fg;
+        final String text;
+        final String mark;
+        final int markColor;
+        final boolean lowercase;
+
+        Logo(int bg, int fg, String text, String mark, int markColor, boolean lowercase) {
+            this.bg = bg;
+            this.fg = fg;
+            this.text = text;
+            this.mark = mark;
+            this.markColor = markColor;
+            this.lowercase = lowercase;
+        }
+    }
+
+    App(String pkg, String name, String tagline, int colorTop, int colorBottom, Logo logo,
         Drawable banner, Drawable icon, Intent launch, boolean sideload, boolean vpn) {
         this.pkg = pkg;
         this.name = name;
         this.tagline = tagline;
         this.colorTop = colorTop;
         this.colorBottom = colorBottom;
+        this.logo = logo;
         this.banner = banner;
         this.icon = icon;
         this.launch = launch;

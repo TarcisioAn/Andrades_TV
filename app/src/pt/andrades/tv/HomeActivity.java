@@ -4,16 +4,19 @@ import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -29,33 +32,46 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * O ecrã inicial. Em cima, a "prateleira": um fundo com as cores do app em foco, o nome e uma frase sobre ele.
- * Em baixo, a doca com os favoritos e, ao descer, todos os apps da TV numa grelha.
+ * O ecrã inicial, ao estilo da Apple TV. O primeiro ecrã tem a saudação e o relógio, um destaque grande do app
+ * em foco e, em baixo, a doca de vidro com os favoritos. Ao descer aparecem todos os apps da TV numa grelha.
  */
 public final class HomeActivity extends Activity implements VpnWatcher.Listener {
-    private static final int COLUMNS = 5;
+    private static final int DOCK_SLOTS = 5;
+    private static final int GRID_COLUMNS = 6;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final List<Card> cards = new ArrayList<>();
     private final ArgbEvaluator argb = new ArgbEvaluator();
 
-    private GradientDrawable heroBg;
-    private int heroTop = 0xFF1C1F26, heroBottom = 0xFF08090C;
-    private ValueAnimator heroAnim;
-    private View hero;
-    private ScrollView scroll;
-    private LinearLayout content;
-    private TextView title, subtitle, clock, date, vpnChip;
+    private Theme theme;
+    private Catalog.Result catalog;
     private VpnWatcher vpn;
     private String focusedPkg;
-    private int heroHeight;
+
+    private FrameLayout root;
+    private ScrollView scroll;
+    private GradientDrawable glow, heroBg;
+    private int colorTop = 0xFF8E8E93, colorBottom = 0xFF3A3A3C;
+    private ValueAnimator colorAnim;
+    private FrameLayout heroFace;
+    private TextView greeting, date, clock, vpnPill, title, subtitle;
+    private int heroFaceW, heroFaceH;
 
     private final Runnable tick = new Runnable() {
         @Override public void run() {
             Date now = new Date();
-            clock.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
-            date.setText(Ui.longDate(now));
+            if (clock != null) {
+                clock.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
+                date.setText(Ui.longDate(now));
+                greeting.setText(Theme.greeting());
+            }
+            // Às 7h e às 20h o tema muda entre claro e escuro.
+            Theme t = Theme.now();
+            if (theme != null && t.dark != theme.dark && catalog != null) {
+                theme = t;
+                build();
+            }
             main.postDelayed(this, 60_000 - (System.currentTimeMillis() % 60_000));
         }
     };
@@ -63,86 +79,35 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        DisplayMetrics dm = getResources().getDisplayMetrics();
-        heroHeight = (int) (dm.heightPixels * 0.50f);
-
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(0xFF000000);
-
-        hero = new View(this);
-        heroBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[] {heroTop, heroBottom, 0xFF000000});
-        hero.setBackground(heroBg);
-        root.addView(hero, new FrameLayout.LayoutParams(-1, -1));
-
-        View shade = new View(this);
-        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[] {0x00000000, 0x33000000, 0xCC000000, 0xF2000000}));
-        root.addView(shade, new FrameLayout.LayoutParams(-1, -1));
-
-        scroll = new ScrollView(this);
-        scroll.setVerticalScrollBarEnabled(false);
-        scroll.setClipToPadding(false);
-        scroll.setSmoothScrollingEnabled(true);
-        scroll.setOnScrollChangeListener((v, x, y, ox, oy) ->
-                hero.setAlpha(1f - Math.min(1f, y / (float) heroHeight) * 0.65f));
-        content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setClipChildren(false);
-        content.setClipToPadding(false);
-        int pad = (int) Ui.dp(this, 64);
-        content.setPadding(pad, 0, pad, pad);
-        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
-        root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
-
-        root.addView(topBar(), new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
-
+        theme = Theme.now();
+        root = new FrameLayout(this);
         setContentView(root);
         vpn = new VpnWatcher(this, this);
-        main.post(tick);
-    }
-
-    /** Relógio, data e o estado da VPN, no canto superior direito. */
-    private View topBar() {
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        int p = (int) Ui.dp(this, 40);
-        bar.setPadding(p, (int) Ui.dp(this, 32), (int) Ui.dp(this, 64), 0);
-
-        vpnChip = Ui.text(this, "", 13, 0xFFFFFFFF);
-        vpnChip.setPadding((int) Ui.dp(this, 12), (int) Ui.dp(this, 6), (int) Ui.dp(this, 12), (int) Ui.dp(this, 6));
-        bar.addView(vpnChip);
-
-        LinearLayout time = new LinearLayout(this);
-        time.setOrientation(LinearLayout.VERTICAL);
-        time.setGravity(Gravity.END);
-        clock = Ui.text(this, "", 30, 0xFFFFFFFF);
-        clock.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
-        date = Ui.text(this, "", 13, 0xB3FFFFFF);
-        date.setPadding(0, (int) Ui.dp(this, 4), 0, 0);
-        time.addView(clock);
-        time.addView(date);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-        lp.leftMargin = (int) Ui.dp(this, 24);
-        bar.addView(time, lp);
-        onVpnChanged(false);
-        return bar;
     }
 
     @Override protected void onResume() {
         super.onResume();
         vpn.start();
-        reload();
+        main.removeCallbacks(tick);
+        main.post(tick);
+        worker.execute(() -> {
+            Catalog.Result r = Catalog.load(this);
+            main.post(() -> {
+                if (isFinishing()) return;
+                catalog = r;
+                theme = Theme.now();
+                build();
+            });
+        });
     }
 
     @Override protected void onPause() {
         super.onPause();
         vpn.stop();
+        main.removeCallbacks(tick);
     }
 
     @Override protected void onDestroy() {
-        main.removeCallbacks(tick);
         worker.shutdownNow();
         super.onDestroy();
     }
@@ -150,120 +115,249 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
     /** O launcher não sai com "Voltar": volta só ao topo. */
     @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (!cards.isEmpty()) cards.get(0).requestFocus();
-            scroll.smoothScrollTo(0, 0);
+            toTop();
             return true;
         }
         return super.onKeyDown(keyCode, event);
     }
 
-    @Override protected void onNewIntent(android.content.Intent intent) {
+    @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        // Botão Home com o launcher já aberto: voltar ao primeiro favorito.
+        toTop();
+    }
+
+    private void toTop() {
         if (!cards.isEmpty()) cards.get(0).requestFocus();
-        scroll.smoothScrollTo(0, 0);
+        if (scroll != null) scroll.smoothScrollTo(0, 0);
     }
 
-    private void reload() {
-        worker.execute(() -> {
-            Catalog.Result r = Catalog.load(this);
-            main.post(() -> { if (!isFinishing()) build(r); });
-        });
+    private int dp(float v) {
+        return (int) Ui.dp(this, v);
     }
 
-    private void build(Catalog.Result r) {
-        content.removeAllViews();
+    private void build() {
+        root.removeAllViews();
         cards.clear();
         DisplayMetrics dm = getResources().getDisplayMetrics();
-        int gap = (int) Ui.dp(this, 36);
-        int width = (dm.widthPixels - content.getPaddingLeft() - content.getPaddingRight() - gap * (COLUMNS - 1)) / COLUMNS;
-        int height = width * 9 / 16;
+        int w = dm.widthPixels, h = dm.heightPixels;
+        int pad = dp(56);
 
-        // A prateleira: o título e a frase do app em foco, colados à doca.
-        LinearLayout shelf = new LinearLayout(this);
-        shelf.setOrientation(LinearLayout.VERTICAL);
-        shelf.setGravity(Gravity.BOTTOM);
-        title = Ui.text(this, "", 44, 0xFFFFFFFF);
-        title.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
-        title.setSingleLine(true);
-        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        // Não passar por baixo do relógio e do estado da VPN.
-        title.setPadding(0, 0, (int) (dm.widthPixels * 0.32f), 0);
-        subtitle = Ui.text(this, "", 18, 0xBFFFFFFF);
-        subtitle.setPadding(0, (int) Ui.dp(this, 10), 0, 0);
-        shelf.addView(title);
-        shelf.addView(subtitle);
-        shelf.setPadding(0, 0, 0, (int) Ui.dp(this, 36));
-        content.addView(shelf, new LinearLayout.LayoutParams(-1, heroHeight));
+        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {theme.bgTop, theme.bgBottom}));
 
-        content.addView(row(r.favorites, width, height, gap, true));
+        // Um brilho suave com as cores do app em foco, por trás de tudo.
+        glow = new GradientDrawable();
+        glow.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        glow.setGradientRadius(w * 0.75f);
+        glow.setGradientCenter(0.5f, 0.35f);
+        glow.setColors(new int[] {withAlpha(colorTop, theme.dark ? 0x55 : 0x40), 0x00000000});
+        View glowView = new View(this);
+        glowView.setBackground(glow);
+        root.addView(glowView, new FrameLayout.LayoutParams(-1, -1));
 
-        TextView all = Ui.text(this, "Todas as apps", 20, 0xB3FFFFFF);
-        all.setPadding(0, (int) Ui.dp(this, 56), 0, (int) Ui.dp(this, 24));
+        scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setClipToPadding(false);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setClipChildren(false);
+        content.setClipToPadding(false);
+        content.setPadding(pad, 0, pad, dp(56));
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+
+        // --- Primeiro ecrã: cabeçalho, destaque, legenda e doca, a ocupar exatamente a altura da TV.
+        int gap = dp(22), dockPad = dp(16);
+        int dockCardW = (w - 2 * pad - 2 * dockPad - (DOCK_SLOTS - 1) * gap) / DOCK_SLOTS;
+        int dockCardH = dockCardW * 9 / 16;
+        int headerH = dp(104), captionH = dp(72), dockH = dockCardH + 2 * dockPad, bottom = dp(28);
+        int heroH = h - headerH - captionH - dockH - bottom;
+
+        LinearLayout first = new LinearLayout(this);
+        first.setOrientation(LinearLayout.VERTICAL);
+        first.setClipChildren(false);
+        first.setClipToPadding(false);
+        first.addView(header(), new LinearLayout.LayoutParams(-1, headerH));
+        first.addView(hero(heroH), new LinearLayout.LayoutParams(-1, heroH));
+        first.addView(caption(), new LinearLayout.LayoutParams(-1, captionH));
+        first.addView(dock(dockCardW, dockCardH, gap, dockPad), new LinearLayout.LayoutParams(-1, dockH));
+        content.addView(first, new LinearLayout.LayoutParams(-1, h - bottom));
+
+        // --- Todas as apps.
+        TextView all = Ui.text(this, "Todas as apps", 22, theme.text);
+        all.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        all.setPadding(0, dp(64), 0, dp(24));
         content.addView(all);
-        for (int i = 0; i < r.others.size(); i += COLUMNS) {
-            LinearLayout row = row(r.others.subList(i, Math.min(i + COLUMNS, r.others.size())), width, height, gap, false);
-            row.setPadding(0, 0, 0, (int) Ui.dp(this, 20));
+        int gridGap = dp(24);
+        int gridW = (w - 2 * pad - (GRID_COLUMNS - 1) * gridGap) / GRID_COLUMNS;
+        int gridH = gridW * 9 / 16;
+        List<App> others = catalog.others;
+        for (int i = 0; i < others.size(); i += GRID_COLUMNS) {
+            LinearLayout row = new LinearLayout(this);
+            row.setClipChildren(false);
+            row.setClipToPadding(false);
+            row.setPadding(0, 0, 0, dp(18));
+            List<App> slice = others.subList(i, Math.min(i + GRID_COLUMNS, others.size()));
+            for (int j = 0; j < slice.size(); j++) {
+                Card card = card(slice.get(j), gridW, gridH, true);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+                if (j > 0) lp.leftMargin = gridGap;
+                row.addView(card, lp);
+            }
             content.addView(row);
         }
 
+        main.removeCallbacks(tick);
+        tick.run();
+        onVpnChanged(vpn.isOn());
         Card target = cards.isEmpty() ? null : cards.get(0);
         for (Card c : cards) if (c.app.pkg.equals(focusedPkg)) target = c;
         if (target != null) target.requestFocus();
-        boolean on = vpn.isOn();
-        for (Card c : cards) c.setVpn(on);
     }
 
-    private LinearLayout row(List<App> apps, int width, int height, int gap, boolean dock) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setClipChildren(false);
-        row.setClipToPadding(false);
-        for (int i = 0; i < apps.size(); i++) {
-            Card card = new Card(this, apps.get(i), width, height);
-            card.setOnClickListener(v -> open(card.app));
-            card.setOnFocus(c -> {
-                focusedPkg = c.app.pkg;
-                showShelf(c.app);
-                if (dock) {
-                    scroll.smoothScrollTo(0, 0);
-                } else {
-                    // Na grelha, a linha em foco fica a meio do ecrã, com espaço para o zoom e o nome.
-                    int y = ((View) c.getParent()).getTop() + height / 2;
-                    scroll.smoothScrollTo(0, Math.max(0, y - scroll.getHeight() / 2));
-                }
-            });
+    private View header() {
+        FrameLayout f = new FrameLayout(this);
+        f.setPadding(0, dp(34), 0, 0);
+
+        LinearLayout left = new LinearLayout(this);
+        left.setOrientation(LinearLayout.VERTICAL);
+        greeting = Ui.text(this, Theme.greeting(), 34, theme.text);
+        greeting.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        date = Ui.text(this, "", 15, theme.textDim);
+        date.setPadding(0, dp(6), 0, 0);
+        left.addView(greeting);
+        left.addView(date);
+        f.addView(left, new FrameLayout.LayoutParams(-2, -2, Gravity.START | Gravity.TOP));
+
+        LinearLayout right = new LinearLayout(this);
+        right.setGravity(Gravity.CENTER_VERTICAL);
+        vpnPill = Ui.text(this, "", 14, theme.text);
+        vpnPill.setPadding(dp(14), dp(8), dp(14), dp(8));
+        right.addView(vpnPill);
+        clock = Ui.text(this, "", 30, theme.text);
+        clock.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.leftMargin = dp(20);
+        right.addView(clock, lp);
+        f.addView(right, new FrameLayout.LayoutParams(-2, -2, Gravity.END | Gravity.TOP));
+        return f;
+    }
+
+    /** O destaque: um painel grande com as cores do app em foco e o logótipo dele ao centro. */
+    private View hero(int heroH) {
+        FrameLayout panel = new FrameLayout(this);
+        Card.round(panel, dp(26));
+        panel.setElevation(dp(6));
+        heroBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[] {colorTop, colorBottom});
+        panel.setBackground(heroBg);
+
+        View light = new View(this);
+        light.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {0x30FFFFFF, 0x00FFFFFF, 0x26000000}));
+        panel.addView(light, new FrameLayout.LayoutParams(-1, -1));
+
+        heroFaceH = (int) (heroH * 0.52f);
+        heroFaceW = heroFaceH * 16 / 9;
+        heroFace = new FrameLayout(this);
+        Card.round(heroFace, dp(18));
+        heroFace.setElevation(dp(16));
+        panel.addView(heroFace, new FrameLayout.LayoutParams(heroFaceW, heroFaceH, Gravity.CENTER));
+        FrameLayout wrap = new FrameLayout(this);
+        wrap.setClipChildren(false);
+        wrap.addView(panel, new FrameLayout.LayoutParams(-1, -1));
+        return wrap;
+    }
+
+    private View caption() {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setPadding(dp(4), dp(16), 0, 0);
+        title = Ui.text(this, "", 22, theme.text);
+        title.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        subtitle = Ui.text(this, "", 15, theme.textDim);
+        subtitle.setPadding(0, dp(6), 0, 0);
+        subtitle.setSingleLine(true);
+        subtitle.setEllipsize(TextUtils.TruncateAt.END);
+        c.addView(title);
+        c.addView(subtitle);
+        return c;
+    }
+
+    /** A doca de vidro fosco com os favoritos. */
+    private View dock(int cw, int ch, int gap, int dockPad) {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER);
+        bar.setClipChildren(false);
+        bar.setClipToPadding(false);
+        bar.setPadding(dockPad, dockPad, dockPad, dockPad);
+        GradientDrawable glass = new GradientDrawable();
+        glass.setCornerRadius(dp(30));
+        glass.setColor(theme.glass);
+        glass.setStroke(dp(1.5f), theme.glassStroke);
+        bar.setBackground(glass);
+        for (int i = 0; i < catalog.favorites.size(); i++) {
+            Card card = card(catalog.favorites.get(i), cw, ch, false);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
             if (i > 0) lp.leftMargin = gap;
-            row.addView(card, lp);
-            cards.add(card);
+            bar.addView(card, lp);
         }
-        return row;
+        return bar;
     }
 
-    private void showShelf(App app) {
+    private Card card(App app, int width, int height, boolean inGrid) {
+        Card card = new Card(this, app, width, height, theme, inGrid);
+        card.setOnClickListener(v -> open(app));
+        card.setOnFocus(c -> {
+            boolean changed = !app.pkg.equals(focusedPkg) || heroFace.getChildCount() == 0;
+            focusedPkg = app.pkg;
+            if (changed) showHero(app);
+            if (!inGrid) {
+                scroll.smoothScrollTo(0, 0);
+            } else {
+                // Na grelha, a linha em foco fica a meio do ecrã, com espaço para o zoom e o nome.
+                int y = ((View) c.getParent()).getTop() + height / 2;
+                scroll.smoothScrollTo(0, Math.max(0, y - scroll.getHeight() / 2));
+            }
+        });
+        cards.add(card);
+        return card;
+    }
+
+    private void showHero(App app) {
         title.setText(app.name);
         subtitle.setText(describe(app));
-        if (heroAnim != null) heroAnim.cancel();
-        int fromTop = heroTop, fromBottom = heroBottom;
-        heroAnim = ValueAnimator.ofFloat(0f, 1f).setDuration(420);
-        heroAnim.addUpdateListener(a -> {
+
+        heroFace.removeAllViews();
+        heroFace.addView(Card.face(this, app, heroFaceW, heroFaceH), new FrameLayout.LayoutParams(-1, -1));
+        heroFace.setAlpha(0f);
+        heroFace.setScaleX(0.96f);
+        heroFace.setScaleY(0.96f);
+        heroFace.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(260)
+                .setInterpolator(new DecelerateInterpolator()).start();
+
+        if (colorAnim != null) colorAnim.cancel();
+        int fromTop = colorTop, fromBottom = colorBottom;
+        colorAnim = ValueAnimator.ofFloat(0f, 1f).setDuration(420);
+        colorAnim.addUpdateListener(a -> {
             float f = (float) a.getAnimatedValue();
-            heroTop = (int) argb.evaluate(f, fromTop, app.colorTop);
-            heroBottom = (int) argb.evaluate(f, fromBottom, app.colorBottom);
-            heroBg.setColors(new int[] {heroTop, heroBottom, 0xFF000000});
+            colorTop = (int) argb.evaluate(f, fromTop, app.colorTop);
+            colorBottom = (int) argb.evaluate(f, fromBottom, app.colorBottom);
+            heroBg.setColors(new int[] {colorTop, colorBottom});
+            glow.setColors(new int[] {withAlpha(colorTop, theme.dark ? 0x55 : 0x40), 0x00000000});
         });
-        heroAnim.start();
+        colorAnim.start();
     }
 
     private String describe(App app) {
         if (!app.installed()) {
             return app.sideload
                     ? "Não instalado. No computador: ./tools/instalar.sh <IP da TV> --smarttube"
-                    : "Não instalado. Carregue OK para abrir a Play Store.";
+                    : "Não instalado. Carregue OK para obter na Play Store.";
         }
         if (app.vpn) {
-            return vpn.isOn() ? "Ligada: a sua ligação está protegida." : "Desligada. Carregue OK para ligar.";
+            return vpn.isOn() ? "Ligada · a sua ligação está protegida" : "Desligada · carregue OK para ligar";
         }
         return app.tagline != null ? app.tagline : "";
     }
@@ -284,14 +378,20 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
     }
 
     @Override public void onVpnChanged(boolean on) {
-        GradientDrawable chip = new GradientDrawable();
-        chip.setCornerRadius(Ui.dp(this, 999));
-        chip.setColor(on ? 0x5934C759 : 0x40FFFFFF);
-        vpnChip.setBackground(chip);
-        vpnChip.setText(on ? "●  VPN ligada" : "○  VPN desligada");
+        if (vpnPill == null) return;
+        GradientDrawable pill = new GradientDrawable();
+        pill.setCornerRadius(dp(999));
+        pill.setColor(on ? 0x4034C759 : theme.glass);
+        pill.setStroke(dp(1), on ? 0x8034C759 : theme.glassStroke);
+        vpnPill.setBackground(pill);
+        vpnPill.setText(on ? "●  VPN ligada" : "○  VPN desligada");
         for (Card c : cards) {
             c.setVpn(on);
             if (c.app.vpn && c.isFocused()) subtitle.setText(describe(c.app));
         }
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | (alpha << 24);
     }
 }
