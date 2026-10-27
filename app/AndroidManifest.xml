@@ -28,6 +28,8 @@
         <package android:name="com.amazon.amazonvideo.livingroom" />
         <package android:name="com.amazon.avod.thirdpartyclient" />
         <package android:name="com.nordvpn.android" />
+        <package android:name="org.smarttube.stable" />
+        <package android:name="org.smarttube.beta" />
         <package android:name="com.teamsmart.videomanager.tv" />
         <package android:name="com.liskovsoft.smarttubetv" />
         <package android:name="com.liskovsoft.smarttubetv.beta" />
