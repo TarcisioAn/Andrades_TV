@@ -103,9 +103,10 @@ final class Card extends LinearLayout {
         label = Ui.text(c, app.name, 14, 0xFFFFFFFF);
         label.setGravity(Gravity.CENTER);
         label.setSingleLine(true);
+        label.setEllipsize(android.text.TextUtils.TruncateAt.END);
         label.setAlpha(0f);
         LayoutParams lp = new LayoutParams(width, -2);
-        lp.topMargin = (int) Ui.dp(c, 16);
+        lp.topMargin = (int) Ui.dp(c, 10);
         addView(label, lp);
 
         setPivotX(width / 2f);

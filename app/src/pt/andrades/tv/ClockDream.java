@@ -26,7 +26,7 @@ public final class ClockDream extends DreamService {
         @Override public void run() {
             Date now = new Date();
             time.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
-            date.setText(new SimpleDateFormat("EEEE, d 'de' MMMM", Locale.getDefault()).format(now));
+            date.setText(Ui.longDate(now));
             FrameLayout parent = (FrameLayout) box.getParent();
             if (parent != null && parent.getWidth() > 0) {
                 float maxX = Math.max(0, parent.getWidth() - box.getWidth());

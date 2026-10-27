@@ -162,7 +162,8 @@ final class Catalog {
     }
 
     static int darken(int color, float factor) {
-        return Color.rgb((int) (Color.red(color) * factor), (int) (Color.green(color) * factor),
-                (int) (Color.blue(color) * factor));
+        return Color.rgb(Math.min(255, (int) (Color.red(color) * factor)),
+                Math.min(255, (int) (Color.green(color) * factor)),
+                Math.min(255, (int) (Color.blue(color) * factor)));
     }
 }

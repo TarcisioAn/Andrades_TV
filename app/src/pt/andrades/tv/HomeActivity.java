@@ -55,7 +55,7 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
         @Override public void run() {
             Date now = new Date();
             clock.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
-            date.setText(new SimpleDateFormat("EEEE, d 'de' MMMM", Locale.getDefault()).format(now));
+            date.setText(Ui.longDate(now));
             main.postDelayed(this, 60_000 - (System.currentTimeMillis() % 60_000));
         }
     };
@@ -185,6 +185,10 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
         shelf.setGravity(Gravity.BOTTOM);
         title = Ui.text(this, "", 44, 0xFFFFFFFF);
         title.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        // Não passar por baixo do relógio e do estado da VPN.
+        title.setPadding(0, 0, (int) (dm.widthPixels * 0.32f), 0);
         subtitle = Ui.text(this, "", 18, 0xBFFFFFFF);
         subtitle.setPadding(0, (int) Ui.dp(this, 10), 0, 0);
         shelf.addView(title);
@@ -221,7 +225,13 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
             card.setOnFocus(c -> {
                 focusedPkg = c.app.pkg;
                 showShelf(c.app);
-                if (dock) scroll.smoothScrollTo(0, 0);
+                if (dock) {
+                    scroll.smoothScrollTo(0, 0);
+                } else {
+                    // Na grelha, a linha em foco fica a meio do ecrã, com espaço para o zoom e o nome.
+                    int y = ((View) c.getParent()).getTop() + height / 2;
+                    scroll.smoothScrollTo(0, Math.max(0, y - scroll.getHeight() / 2));
+                }
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
             if (i > 0) lp.leftMargin = gap;
