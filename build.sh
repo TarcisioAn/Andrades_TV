@@ -14,11 +14,27 @@ fi
 BT="$SDK/build-tools/$(ls "$SDK/build-tools" | sort -V | tail -1)"
 AJ="$(ls -d "$SDK"/platforms/android-*/android.jar | sort -V | tail -1)"
 
+# Versão: o número de commits (sobe a cada mudança). As atualizações na TV comparam este número.
+VERSION_CODE="${VERSION_CODE:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
+VERSION_NAME="1.$VERSION_CODE"
+
 rm -rf out && mkdir -p out/gen out/classes
+cat > out/gen/BuildInfo.java <<EOF2
+package pt.andrades.tv;
+
+/** Gerado pelo build.sh. */
+final class BuildInfo {
+    private BuildInfo() {}
+
+    static final int VERSION_CODE = $VERSION_CODE;
+    static final String REPO = "TarcisioAn/Andrades_TV";
+}
+EOF2
 
 "$BT/aapt2" compile --dir app/res -o out/res.zip
 "$BT/aapt2" link -o out/base.apk -I "$AJ" --manifest app/AndroidManifest.xml --java out/gen \
-  --min-sdk-version 26 --target-sdk-version 34 out/res.zip
+  --min-sdk-version 26 --target-sdk-version 34 \
+  --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" --replace-version out/res.zip
 
 javac -nowarn -Xlint:-options --release 11 -XDstringConcat=inline -classpath "$AJ" -d out/classes \
   $(find app/src out/gen -name '*.java')
@@ -27,12 +43,15 @@ javac -nowarn -Xlint:-options --release 11 -XDstringConcat=inline -classpath "$A
 (cd out && zip -q base.apk classes.dex)
 "$BT/zipalign" -f -p 4 out/base.apk out/aligned.apk
 
-# A chave fica só neste computador (fora do git). Guarde-a: atualizar o app na TV exige a mesma chave.
-if [ ! -f andradestv.keystore ]; then
+# A chave fica só neste computador (fora do git) e nos segredos do GitHub. Atualizar o app na TV exige a mesma.
+# No GitHub Actions vem de ANDRADESTV_KEYSTORE (base64).
+if [ -n "${ANDRADESTV_KEYSTORE:-}" ]; then
+  printf '%s' "$ANDRADESTV_KEYSTORE" | base64 --decode > andradestv.keystore
+elif [ ! -f andradestv.keystore ]; then
   keytool -genkeypair -keystore andradestv.keystore -alias andradestv -keyalg RSA -keysize 2048 \
     -validity 10000 -storepass andradestv -keypass andradestv -dname "CN=Andrades TV" >/dev/null 2>&1
 fi
 "$BT/apksigner" sign --ks andradestv.keystore --ks-pass pass:andradestv --key-pass pass:andradestv \
   --out AndradesTV.apk out/aligned.apk
 
-echo "Pronto: $(pwd)/AndradesTV.apk"
+echo "Pronto: $(pwd)/AndradesTV.apk (versão $VERSION_NAME)"

@@ -10,7 +10,8 @@ Um ecrã inicial leve e sem anúncios para TVs Android / Google TV, com o visual
 - **Estado da VPN** sempre visível no canto superior direito, ao lado do relógio.
 - **Protetor de ecrã** com relógio, que muda de sítio a cada minuto.
 - **Sem root e reversível:** nada é apagado, e `tools/restaurar.sh` repõe a TV como veio de fábrica.
-- **Sem serviços externos:** o app não faz pedidos à internet. Só usa as permissões de ver o estado da rede.
+- **Leve:** no emulador usa ~26 MB de memória, contra ~46 MB do ecrã original do Android TV.
+- **Atualiza-se sozinho a partir do GitHub.** O único serviço externo é o GitHub, consultado no máximo a cada 6 horas.
 
 ## Preparar a TV
 
@@ -54,6 +55,21 @@ abrir o ecrã antigo.
 ```bash
 ./tools/restaurar.sh 192.168.1.50                 # repõe o ecrã da fábrica, o protetor e a VPN
 ./tools/restaurar.sh 192.168.1.50 --desinstalar   # e remove o Andrades TV
+```
+
+## Atualizações
+
+Cada push no `main` faz o GitHub Actions compilar o APK, assiná-lo e publicá-lo como release (`v<número>`).
+Quando o ecrã inicial abre, o Andrades TV vê se há uma release mais nova (no máximo a cada 6 horas). Se houver,
+aparece um cartão **Atualizar** no início de *Todas as apps*. Ao carregar OK, o app descarrega o APK, confirma
+o tamanho e o SHA-256 publicados pelo GitHub, e o Android pede confirmação antes de instalar.
+
+Na primeira vez, o Android pede para autorizar o Andrades TV a instalar apps.
+
+O workflow precisa da chave de assinatura no segredo `ANDRADESTV_KEYSTORE`, criado uma única vez com:
+
+```bash
+base64 -i andradestv.keystore | gh secret set ANDRADESTV_KEYSTORE -R TarcisioAn/Andrades_TV
 ```
 
 ## Sobre a VPN

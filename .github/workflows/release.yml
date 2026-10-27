@@ -1,0 +1,43 @@
+# A cada push no main: compila o APK, assina-o com a chave guardada nos segredos e publica-o como release.
+# As TVs com o Andrades TV veem a release nova e oferecem a atualização.
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # o número de versão é a contagem de commits
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Android SDK
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0" "platforms;android-34" >/dev/null
+
+      - name: Compilar
+        env:
+          ANDRADESTV_KEYSTORE: ${{ secrets.ANDRADESTV_KEYSTORE }}
+        run: |
+          [ -n "$ANDRADESTV_KEYSTORE" ] || { echo "Falta o segredo ANDRADESTV_KEYSTORE"; exit 1; }
+          ./build.sh
+          rm -f andradestv.keystore
+
+      - name: Publicar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          N="$(git rev-list --count HEAD)"
+          gh release create "v$N" AndradesTV.apk --title "Andrades TV 1.$N" \
+            --notes "$(git log -1 --pretty=%s)"

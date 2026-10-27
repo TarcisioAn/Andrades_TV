@@ -38,6 +38,7 @@ import java.util.concurrent.Executors;
 public final class HomeActivity extends Activity implements VpnWatcher.Listener {
     private static final int DOCK_SLOTS = 5;
     private static final int GRID_COLUMNS = 6;
+    private static final String UPDATE = "andrades.update";
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -48,6 +49,8 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
     private Catalog.Result catalog;
     private VpnWatcher vpn;
     private String focusedPkg;
+    private Updater.Release update;
+    private boolean installing;
 
     private FrameLayout root;
     private ScrollView scroll;
@@ -63,7 +66,7 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
             Date now = new Date();
             if (clock != null) {
                 clock.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
-                date.setText(Ui.longDate(now));
+                date.setText(Ui.longDate(now) + (update != null ? "  ·  Atualização disponível em Todas as apps" : ""));
                 greeting.setText(Theme.greeting());
             }
             // Às 7h e às 20h o tema muda entre claro e escuro.
@@ -92,9 +95,11 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
         main.post(tick);
         worker.execute(() -> {
             Catalog.Result r = Catalog.load(this);
+            Updater.Release u = Updater.check(this);
             main.post(() -> {
                 if (isFinishing()) return;
                 catalog = r;
+                update = u;
                 theme = Theme.now();
                 build();
             });
@@ -191,7 +196,12 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
         int gridGap = dp(24);
         int gridW = (w - 2 * pad - (GRID_COLUMNS - 1) * gridGap) / GRID_COLUMNS;
         int gridH = gridW * 9 / 16;
-        List<App> others = catalog.others;
+        List<App> others = new ArrayList<>(catalog.others);
+        if (update != null) {
+            others.add(0, new App(UPDATE, "Atualizar", "Andrades TV 1." + update.version + " · carregue OK para instalar",
+                    0xFF34C759, 0xFF0B4A1E, new App.Logo(0xFF30B455, 0xFFFFFFFF, "Atualizar", "↓", 0xFFFFFFFF, false),
+                    null, null, new Intent(), false, false));
+        }
         for (int i = 0; i < others.size(); i += GRID_COLUMNS) {
             LinearLayout row = new LinearLayout(this);
             row.setClipChildren(false);
@@ -363,6 +373,10 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
     }
 
     private void open(App app) {
+        if (UPDATE.equals(app.pkg)) {
+            installUpdate();
+            return;
+        }
         try {
             if (app.installed()) {
                 startActivity(app.launch);
@@ -375,6 +389,32 @@ public final class HomeActivity extends Activity implements VpnWatcher.Listener 
         } catch (ActivityNotFoundException | SecurityException e) {
             Toast.makeText(this, "Não foi possível abrir " + app.name, Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private void installUpdate() {
+        if (installing || update == null) return;
+        if (!Updater.canInstall(this)) {
+            Toast.makeText(this, "Autorize o Andrades TV a instalar apps e carregue OK outra vez.", Toast.LENGTH_LONG).show();
+            try {
+                startActivity(Updater.permissionIntent(this));
+            } catch (ActivityNotFoundException e) {
+                Toast.makeText(this, "Esta TV não tem esse ecrã. No computador: ./tools/instalar.sh <IP da TV>",
+                        Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
+        installing = true;
+        Toast.makeText(this, "A descarregar a atualização…", Toast.LENGTH_SHORT).show();
+        Updater.Release r = update;
+        worker.execute(() -> {
+            try {
+                Updater.install(this, r);
+            } catch (Exception e) {
+                main.post(() -> Toast.makeText(this, "A atualização falhou: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            } finally {
+                installing = false;
+            }
+        });
     }
 
     @Override public void onVpnChanged(boolean on) {
