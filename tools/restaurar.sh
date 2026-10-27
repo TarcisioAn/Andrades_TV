@@ -38,6 +38,9 @@ restore() {  # restore <chave em settings secure> <valor guardado>
 restore screensaver_components "$(val saver)"
 restore always_on_vpn_app "$(val vpn)"
 
+REMOVED="$(val removed || true)"
+[ -z "$REMOVED" ] || echo "→ Desinstalados na limpeza (reinstale pela Play Store se precisar): $REMOVED"
+
 if $UNINSTALL; then
   adb -s "$TARGET" uninstall "$PKG" >/dev/null && echo "→ Andrades TV removido."
 fi
