@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 16:9, o formato dos banners de Android TV (320x180). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#FF16181D" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M112,48h96a8,8 0,0 1,8 8v56a8,8 0,0 1,-8 8h-96a8,8 0,0 1,-8 -8v-56a8,8 0,0 1,8 -8z" />
+    <path android:fillColor="#FF16181D" android:pathData="M150,66l26,18l-26,18z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M140,130h40v6h-40z" />
+</vector>

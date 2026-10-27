@@ -1,0 +1,6 @@
+out/
+*.apk
+*.keystore
+tools/estado/
+.DS_Store
+*.idsig
